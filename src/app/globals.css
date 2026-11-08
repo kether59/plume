@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+@theme {
+  --color-slate-50: #211b15;
+  --color-slate-100: #342c23;
+  --color-slate-200: #4c4133;
+  --color-slate-300: #605442;
+  --color-slate-400: #6f6250;
+  --color-slate-500: #81735e;
+  --color-slate-600: #9d8f78;
+  --color-slate-700: #c9bea9;
+  --color-slate-800: #ddd3c0;
+  --color-slate-900: #fffdf8;
+  --color-slate-950: #f4efe5;
+}
+
+@layer base {
+  html {
+    background: #f4efe5;
+  }
+
+  body {
+    background-image: radial-gradient(ellipse at 50% 0, #fffdf8 0, #f4efe5 68%);
+  }
+
+  :root {
+    --font-serif: "Palatino Linotype", "Book Antiqua", "Georgia", serif;
+  }
+}
+
+.font-novel {
+  font-family: var(--font-serif);
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 99, 69, 0.32);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 99, 69, 0.52);
+}
+
+.text-white {
+  color: #fffdf8;
+}
+
+.new-project-dialog .text-slate-300 {
+  color: #cbd5e1;
+}
+
+.new-project-dialog .text-slate-400 {
+  color: #94a3b8;
+}
+
+.new-project-dialog .text-slate-500 {
+  color: #94a3b8;
+}
+
+.new-project-dialog input,
+.new-project-dialog select {
+  color: #f8fafc;
+  background-color: #1e293b;
+}
+
+.new-project-dialog input::placeholder {
+  color: #94a3b8;
+}
+
+.text-amber-100,
+.text-amber-200,
+.text-amber-300,
+.text-amber-400 {
+  color: #79540f;
+}
+
+.text-indigo-300,
+.text-sky-300,
+.text-sky-400 {
+  color: #075985;
+}
+
+.text-purple-400 {
+  color: #6b21a8;
+}
+
+.text-emerald-300,
+.text-emerald-400 {
+  color: #047857;
+}
+
+.bg-slate-900.text-white,
+.bg-slate-800.text-white,
+.bg-slate-900 .text-white,
+.bg-slate-800 .text-white {
+  color: #342c23;
+}
+
+.bg-slate-900\/90 .text-white,
+.bg-slate-900\/80 .text-white,
+.bg-slate-900\/60 .text-white,
+.bg-slate-800\/80 .text-white,
+.bg-slate-800\/70 .text-white,
+.bg-slate-800\/60 .text-white {
+  color: #342c23;
+}
+
+.bookmark-tab {
+  position: relative;
+  border-radius: 0.7rem 0.7rem 0.2rem 0.2rem;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.bookmark-tab[aria-current="page"],
+.bookmark-tab:hover {
+  transform: translateY(-1px);
+}
+
+.bookmark-tab[aria-current="page"]::after {
+  position: absolute;
+  right: 0.65rem;
+  bottom: -0.35rem;
+  left: 0.65rem;
+  height: 0.35rem;
+  background: #d6a54b;
+  content: "";
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 65%, 0 100%);
+}
+
+@keyframes flowGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(234, 88, 12, 0.35);
+  }
+}
+
+.flow-active {
+  animation: flowGlow 3s infinite ease-in-out;
+}
+
+input,
+textarea,
+select {
+  color: #342c23;
+}
+
+option {
+  color: #342c23;
+  background-color: #fffdf8;
+}
+
+.new-project-dialog input,
+.new-project-dialog select {
+  color: #f8fafc;
+  background-color: #1e293b;
+}
