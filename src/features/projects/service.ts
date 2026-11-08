@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   betaFeedbacks,
   chapters,
+  characterRelations,
   characters,
   projects,
   timelineEvents,
@@ -192,7 +193,7 @@ export async function getProjectDetail(projectId: number) {
   const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
   if (!project) return null;
 
-  const [projectChapters, projectCharacters, projectWorldNotes, projectSessions, projectFeedbacks, projectTimeline] =
+  const [projectChapters, projectCharacters, projectWorldNotes, projectSessions, projectFeedbacks, projectTimeline, relations] =
     await Promise.all([
       db.select().from(chapters).where(eq(chapters.projectId, projectId)).orderBy(asc(chapters.orderIndex)),
       db.select().from(characters).where(eq(characters.projectId, projectId)).orderBy(asc(characters.name)),
@@ -201,6 +202,7 @@ export async function getProjectDetail(projectId: number) {
       db.select().from(betaFeedbacks).where(eq(betaFeedbacks.projectId, projectId)).orderBy(desc(betaFeedbacks.createdAt)),
       db.select().from(timelineEvents).where(eq(timelineEvents.projectId, projectId))
         .orderBy(asc(timelineEvents.orderIndex), asc(timelineEvents.id)),
+      db.select().from(characterRelations).where(eq(characterRelations.projectId, projectId)),
     ]);
 
   const characterIds = new Set(projectCharacters.map((character) => character.id));
@@ -212,6 +214,7 @@ export async function getProjectDetail(projectId: number) {
     },
     chapters: projectChapters,
     characters: projectCharacters,
+    characterRelations: relations,
     worldNotes: projectWorldNotes,
     writingSessions: projectSessions,
     betaFeedbacks: projectFeedbacks,

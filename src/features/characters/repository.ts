@@ -5,11 +5,13 @@ import { characters, projects } from "@/db/schema";
 type CharacterInsert = typeof characters.$inferInsert;
 export type CreateCharacterInput = Pick<CharacterInsert, "projectId" | "name"> &
   Partial<Pick<CharacterInsert,
-    "role" | "consciousDesire" | "unconsciousNeed" | "lieOrFlaw" | "externalObstacles" |
+    "role" | "consciousDesire" | "unconsciousNeed" | "lieOrFlaw" | "eyeColor" | "hairColor" |
+    "height" | "physicalParticularity" | "age" | "birthDate" | "externalObstacles" |
     "internalObstacles" | "characterArc" | "distinguishingFeatures" | "relationships" | "notes" | "color"
   >>;
 export type UpdateCharacterInput = Partial<Pick<CharacterInsert,
-  "name" | "role" | "consciousDesire" | "unconsciousNeed" | "lieOrFlaw" | "externalObstacles" |
+  "name" | "role" | "consciousDesire" | "unconsciousNeed" | "lieOrFlaw" | "eyeColor" | "hairColor" |
+  "height" | "physicalParticularity" | "age" | "birthDate" | "externalObstacles" |
   "internalObstacles" | "characterArc" | "distinguishingFeatures" | "relationships" | "notes" | "color"
 >>;
 
@@ -21,6 +23,12 @@ export async function createCharacter(input: CreateCharacterInput) {
     consciousDesire: input.consciousDesire || "",
     unconsciousNeed: input.unconsciousNeed || "",
     lieOrFlaw: input.lieOrFlaw || "",
+    eyeColor: input.eyeColor || "",
+    hairColor: input.hairColor || "",
+    height: input.height || "",
+    physicalParticularity: input.physicalParticularity || "",
+    age: input.age || "",
+    birthDate: input.birthDate || "",
     externalObstacles: input.externalObstacles || "",
     internalObstacles: input.internalObstacles || "",
     characterArc: input.characterArc || "",

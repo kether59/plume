@@ -1,14 +1,7 @@
 import { callAiService, type AiRequestOptions } from "@/lib/ai-service";
 import { loadNovelContext, loadStoredAiConfig } from "@/features/ai/repository";
-
-export type AiTask =
-  | "continue"
-  | "unblock"
-  | "rewrite"
-  | "extract"
-  | "coherence"
-  | "character_help"
-  | "structure_help";
+import type { AiTask } from "@/features/ai/types";
+export type { AiTask } from "@/features/ai/types";
 
 export interface GenerateNovelContentInput {
   task: AiTask;

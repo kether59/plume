@@ -12,7 +12,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const update: UpdateCharacterInput = {};
-    for (const field of ["name", "role", "consciousDesire", "unconsciousNeed", "lieOrFlaw", "externalObstacles", "internalObstacles", "characterArc", "distinguishingFeatures", "relationships", "notes", "color"] as const) {
+    for (const field of ["name", "role", "consciousDesire", "unconsciousNeed", "lieOrFlaw", "eyeColor", "hairColor", "height", "physicalParticularity", "age", "birthDate", "externalObstacles", "internalObstacles", "characterArc", "distinguishingFeatures", "relationships", "notes", "color"] as const) {
       if (body[field] !== undefined) Object.assign(update, { [field]: body[field] });
     }
     const updated = await updateCharacter(charId, update);

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { getAppLocale } from "@/lib/locale";
 import { Plus, Sparkles, Layers, CheckCircle2, Circle, Edit, Trash2, ArrowUpDown, HelpCircle, ShieldAlert } from "lucide-react";
 
 interface StructureTabProps {
@@ -127,6 +128,7 @@ export function StructureTab({ projectId, project, chapters, onRefresh, onOpenDr
           task: "structure_help",
           projectId,
           text: outlineSummary,
+          locale: getAppLocale(),
         }),
       });
       const data = await res.json();

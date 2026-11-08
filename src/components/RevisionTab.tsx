@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { getAppLocale } from "@/lib/locale";
 import { 
   Hourglass, 
   Sparkles, 
@@ -57,6 +58,7 @@ export function RevisionTab({ projectId, project, chapters, characters, onRefres
           projectId,
           chapterId: selectedChapter.id,
           text: selectedChapter.content,
+          locale: getAppLocale(),
         }),
       });
       const data = await res.json();

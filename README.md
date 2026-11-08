@@ -8,9 +8,12 @@ suivi des objectifs et les outils de relecture dans un atelier privé, accessibl
 - **Projets de roman** : création, sélection, résumé, genre, tonalité, objectifs de mots et étape de travail. Une base
   vierge reçoit automatiquement un projet de démonstration.
 - **Recherche et grimoire** : fiches d’univers, règles, lieux et inspirations, avec catégories et étiquettes.
+  Les contenus acceptent les listes, titres et tableaux Markdown ; une catégorie dédiée « Lexiques & Annexes » permet
+  de ranger les dictionnaires, listes de noms et nomenclatures.
 - **Structure** : chapitres ordonnés, actes, synopsis, lieu et personnage de point de vue ; raccourci vers le studio
   d’écriture.
-- **Personnages** : rôle, désir conscient, besoin profond, faille, obstacles, arc, caractéristiques et relations.
+- **Personnages** : rôle, désir conscient, besoin profond, faille, obstacles, arc, détails physiques (yeux, cheveux,
+  taille, particularité, âge/date de naissance) et relations structurées visualisées en graphe.
 - **Premier jet** : éditeur de chapitre, sauvegarde, modes sprint et anti-autocensure, suivi du temps et des mots,
   cartes de déblocage, proposition de reformulation et extraction IA filtrable par personnages, lieux, événements et
   informations générales.
@@ -127,6 +130,20 @@ fonctionnalité ; vérifiez ses conditions de confidentialité avant d’y trans
 est signalée au lieu d’être remplacée silencieusement par une réponse de démonstration. Le fonctionnement sans service
 IA externe reste possible avec le moteur intégré.
 
+Les appels passent par `src/app/api/ai/route.ts`, puis le cas d’usage
+`src/features/ai/generate-novel-content.ts`. La liste partagée des actions autorisées est définie dans
+`src/features/ai/types.ts`. `src/lib/ai-service.ts` contient le persona global de Plume, les consignes et le format de
+sortie propres à chaque action, ainsi que la validation à l’exécution des réponses structurées (JSON). Chaque requête
+contient l’action, la sous-action éventuelle, le texte cible, le contexte du roman, la langue et le format de sortie
+attendu. Les formats texte (continuation et réécriture) restent du texte brut ; les extractions, analyses, fiches et
+propositions structurées sont validées avant d’être transmises à l’interface.
+Le moteur intégré est un mode de démonstration déterministe : les propositions contextualisées de fiche personnage,
+« Show, Don’t Tell » et paraphrase nécessitent Ollama, LM Studio ou un fournisseur cloud configuré.
+
+Dans le studio, « Reformuler la sélection » et « M’aider à exprimer cette idée » s’appliquent à une sélection active.
+La deuxième action demande une interprétation prudente et jusqu’à trois formulations de remplacement ; aucune n’est
+insérée sans validation de l’auteur.
+
 ## API principale
 
 Toutes les routes métier exigent une session valide. Les routes d’authentification sont `POST /api/auth/login` et
@@ -137,6 +154,7 @@ Toutes les routes métier exigent une session valide. Les routes d’authentific
 | `/api/projects`, `/api/projects/[id]`           | Lister, créer, consulter, modifier et supprimer des projets. |
 | `/api/chapters`, `/api/chapters/[id]`           | Créer, modifier et supprimer des chapitres.                  |
 | `/api/characters`, `/api/characters/[id]`       | Gérer les personnages.                                       |
+| `/api/character-relations`, `/api/character-relations/[id]` | Gérer les relations entre personnages.                       |
 | `/api/world-notes`, `/api/world-notes/[id]`     | Gérer le grimoire.                                           |
 | `/api/sessions`                                 | Enregistrer et consulter les sessions d’écriture.            |
 | `/api/beta-feedback`, `/api/beta-feedback/[id]` | Gérer les retours bêta-lecteurs.                             |
@@ -170,8 +188,9 @@ Conservez les sauvegardes hors du Raspberry et restaurez-les avec :
 Get-Content sauvegarde.sql | docker compose exec -T database psql -U novel_writer -d novel_writer
 ```
 
-Après une modification de `src/db/schema.ts`, exécutez `npm run db:push` et sauvegardez la base avant toute évolution
-qui peut supprimer ou transformer des données. Vérifiez l’état de l’application avec `GET /api/health`.
+Après une modification de `src/db/schema.ts`, exécutez `npm run db:push` pour appliquer les changements de schéma
+(notamment les champs physiques et la table `character_relations`) et sauvegardez la base avant toute évolution qui
+peut supprimer ou transformer des données. Vérifiez l’état de l’application avec `GET /api/health`.
 
 ### Dépannage : « Failed query » en ouvrant les projets
 

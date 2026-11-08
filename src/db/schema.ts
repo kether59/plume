@@ -45,6 +45,12 @@ export const characters = pgTable("characters", {
   consciousDesire: text("conscious_desire"), // Ce qu'il croit vouloir (Désir extérieur)
   unconsciousNeed: text("unconscious_need"), // Ce dont il a réellement besoin pour s'accomplir
   lieOrFlaw: text("lie_or_flaw"), // Le mensonge ou la faille intérieure
+  eyeColor: text("eye_color"),
+  hairColor: text("hair_color"),
+  height: text("height"),
+  physicalParticularity: text("physical_particularity"),
+  age: text("age"),
+  birthDate: text("birth_date"),
   externalObstacles: text("external_obstacles"), // Les obstacles concrets dans le monde
   internalObstacles: text("internal_obstacles"), // Ses doutes, ses peurs, ses traumatismes
   characterArc: text("character_arc"), // Évolution prévue (Positif, Tragique, Plat)
@@ -56,11 +62,22 @@ export const characters = pgTable("characters", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const characterRelations = pgTable("character_relations", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  sourceCharacterId: integer("source_character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
+  targetCharacterId: integer("target_character_id").notNull().references(() => characters.id, { onDelete: "cascade" }),
+  relationType: text("relation_type").notNull().default("friend"),
+  description: text("description").default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const worldNotes = pgTable("world_notes", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
-  category: text("category").default("lore"), // 'lore', 'lieux', 'epoque', 'magie_techno', 'societe', 'inspiration', 'regles'
+  category: text("category").default("lore"), // lore, lieux, epoque, magie_techno, societe, inspiration, regles, annexes
   content: text("content").notNull(),
   tags: text("tags"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

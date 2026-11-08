@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import { getAppLocale } from "@/lib/locale";
 import { Plus, Sparkles, BookOpen, Trash2, Edit3, Tag, Globe, Wand2, Compass, ShieldAlert } from "lucide-react";
+import { LoreMarkdown } from "@/components/LoreMarkdown";
 
 interface ResearchTabProps {
   projectId: number;
@@ -13,10 +15,13 @@ interface ResearchTabProps {
 const CATEGORIES = [
   { id: "all", label: "Toutes les notes" },
   { id: "lore", label: "Univers & Lore" },
+  { id: "lieux", label: "Lieux" },
   { id: "magie_techno", label: "Règles & Pouvoirs" },
+  { id: "regles", label: "Règles" },
   { id: "epoque", label: "Époque & Décors" },
   { id: "societe", label: "Société & Factions" },
   { id: "inspiration", label: "Inspirations & Thèmes" },
+  { id: "annexes", label: "Lexiques & Annexes" },
 ];
 
 export function ResearchTab({ projectId, worldNotes, onRefresh, project }: ResearchTabProps) {
@@ -93,9 +98,10 @@ export function ResearchTab({ projectId, worldNotes, onRefresh, project }: Resea
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          task: "unblock",
+          task: "world_brainstorm",
           projectId,
           text: `Brainstorm de recherche d'univers pour: ${project.title}. Genre: ${project.genre}. Synopsis: ${project.synopsis}`,
+          locale: getAppLocale(),
         }),
       });
       const data = await res.json();
@@ -154,6 +160,7 @@ export function ResearchTab({ projectId, worldNotes, onRefresh, project }: Resea
               setNewTitle("");
               setNewContent("");
               setNewTags("");
+              if (selectedCategory === "annexes") setNewCategory("annexes");
               setIsCreating(true);
             }}
             className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium transition flex items-center gap-1.5 shadow-md shadow-amber-600/20"
@@ -238,10 +245,13 @@ export function ResearchTab({ projectId, worldNotes, onRefresh, project }: Resea
                   className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
                 >
                   <option value="lore">Univers & Lore</option>
+                  <option value="lieux">Lieux</option>
                   <option value="magie_techno">Règles & Pouvoirs</option>
+                  <option value="regles">Règles</option>
                   <option value="epoque">Époque & Décors</option>
                   <option value="societe">Société & Factions</option>
                   <option value="inspiration">Inspirations & Thèmes</option>
+                  <option value="annexes">Lexiques & Annexes</option>
                 </select>
               </div>
             </div>
@@ -251,11 +261,18 @@ export function ResearchTab({ projectId, worldNotes, onRefresh, project }: Resea
               <textarea
                 rows={4}
                 required
-                placeholder="Décrivez cet élément avec des détails sensoriels concrets (odeurs, sons, lois physiques, interdits moraux)..."
+                placeholder={"Notes en Markdown prises en charge.\n\nExemple de liste :\n- Élève : Maëlys\n- Rang : préfète\n\n| Mot | Traduction |\n| --- | --- |\n| Aïra | Bonjour |"}
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-amber-500 leading-relaxed"
               />
+              <p className="mt-1 text-[10px] text-slate-500">Les listes à puces, listes numérotées, titres et tableaux Markdown sont affichés dans les fiches.</p>
+              {newContent.trim() && (
+                <details className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  <summary className="cursor-pointer text-[11px] font-medium text-amber-300">Aperçu de la mise en forme</summary>
+                  <LoreMarkdown content={newContent} className="mt-3" />
+                </details>
+              )}
             </div>
 
             <div>
@@ -326,9 +343,7 @@ export function ResearchTab({ projectId, worldNotes, onRefresh, project }: Resea
                 </div>
 
                 <h3 className="font-semibold text-white text-sm mt-2">{note.title}</h3>
-                <p className="text-xs text-slate-300 mt-1 line-clamp-4 leading-relaxed font-novel">
-                  {note.content}
-                </p>
+                <LoreMarkdown content={note.content} className="mt-2 max-h-56 overflow-y-auto font-novel" />
               </div>
 
               {note.tags && (

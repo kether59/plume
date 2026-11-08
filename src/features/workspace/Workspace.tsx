@@ -14,13 +14,16 @@ import { ArchitectureVisionModal } from "@/components/ArchitectureVisionModal";
 import { AiSettingsModal } from "@/components/AiSettingsModal";
 import { Feather, Compass, Layers, Sparkles, BookOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAppLocale } from "@/components/AppLocaleProvider";
 
 export default function Home() {
+  const { locale } = useAppLocale();
   const router = useRouter();
   const [projectsList, setProjectsList] = useState<any[]>([]);
   const [currentProject, setCurrentProject] = useState<any | null>(null);
   const [chapters, setChapters] = useState<any[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
+  const [characterRelations, setCharacterRelations] = useState<any[]>([]);
   const [worldNotes, setWorldNotes] = useState<any[]>([]);
   const [writingSessions, setWritingSessions] = useState<any[]>([]);
   const [betaFeedbacks, setBetaFeedbacks] = useState<any[]>([]);
@@ -44,6 +47,7 @@ export default function Home() {
       setCurrentProject(data.project);
       setChapters(data.chapters || []);
       setCharacters(data.characters || []);
+      setCharacterRelations(data.characterRelations || []);
       setWorldNotes(data.worldNotes || []);
       setWritingSessions(data.writingSessions || []);
       setBetaFeedbacks(data.betaFeedbacks || []);
@@ -179,7 +183,9 @@ export default function Home() {
           <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/30 animate-pulse">
             <Feather className="w-8 h-8 animate-bounce" />
           </div>
-          <span className="font-serif text-amber-200 text-sm">Ouverture de votre atelier d&apos;écriture...</span>
+          <span className="font-serif text-amber-200 text-sm">
+            {locale === "en" ? "Opening your writing studio..." : "Ouverture de votre atelier d'écriture..."}
+          </span>
         </div>
       </div>
     );
@@ -211,14 +217,14 @@ export default function Home() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         {loadError ? (
           <section className="mx-auto mt-12 max-w-2xl rounded-2xl border border-rose-300 bg-rose-50 p-6 text-rose-950 shadow-sm">
-            <h1 className="font-serif text-xl font-semibold">L’atelier n’a pas pu ouvrir vos projets</h1>
+            <h1 className="font-serif text-xl font-semibold">{locale === "en" ? "The studio could not load your projects" : "L’atelier n’a pas pu ouvrir vos projets"}</h1>
             <p className="mt-2 text-sm">{loadError}</p>
-            <p className="mt-3 text-sm">Vérifiez la configuration de la base de données, puis réessayez.</p>
+            <p className="mt-3 text-sm">{locale === "en" ? "Check your database configuration and try again." : "Vérifiez la configuration de la base de données, puis réessayez."}</p>
             <button
               onClick={loadAllProjects}
               className="mt-5 rounded-lg bg-rose-900 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
             >
-              Réessayer
+              {locale === "en" ? "Try again" : "Réessayer"}
             </button>
           </section>
         ) : currentProject ? (
@@ -260,6 +266,7 @@ export default function Home() {
               <CharactersTab
                 projectId={currentProject.id}
                 characters={characters}
+                relations={characterRelations}
                 onRefresh={() => loadProject(currentProject.id)}
                 project={currentProject}
               />
@@ -300,7 +307,7 @@ export default function Home() {
           </div>
         ) : (
           <div className="text-center py-20">
-            <p className="text-slate-400">Aucun projet sélectionné.</p>
+            <p className="text-slate-400">{locale === "en" ? "No project selected." : "Aucun projet sélectionné."}</p>
           </div>
         )}
       </main>
@@ -309,10 +316,12 @@ export default function Home() {
       <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
-            Plume & Premier Jet — L&apos;Atelier d&apos;Écriture Bienveillant pour Romanciers en Devenir
+            {locale === "en"
+              ? "Plume & First Draft — A supportive writing studio for aspiring novelists"
+              : "Plume & Premier Jet — L’Atelier d’Écriture Bienveillant pour Romanciers en Devenir"}
           </span>
           <span className="italic text-slate-400">
-            « Écrivez avec le cœur, réécrivez avec la tête. »
+            {locale === "en" ? "“Write with your heart, revise with your mind.”" : "« Écrivez avec le cœur, réécrivez avec la tête. »"}
           </span>
         </div>
       </footer>

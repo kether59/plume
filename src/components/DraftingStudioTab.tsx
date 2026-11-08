@@ -27,6 +27,26 @@ import {
 } from "lucide-react";
 import { ChapterExtractionPanel } from "@/components/ChapterExtractionPanel";
 import { parseStoryExtraction, type ExtractionType, type StoryExtractionResult } from "@/lib/story-extraction";
+import { useAppLocale } from "@/components/AppLocaleProvider";
+
+interface RewriteSuggestion {
+  start: number;
+  end: number;
+  original: string;
+  replacement: string;
+  explanation: string;
+}
+
+interface RewriteTarget {
+  start: number;
+  end: number;
+  original: string;
+}
+
+interface WritingIntentSuggestion {
+  intention: string;
+  proposals: string[];
+}
 
 interface DraftingStudioTabProps {
   projectId: number;
@@ -49,6 +69,7 @@ export function DraftingStudioTab({
   onRefresh,
   onRecordSession,
 }: DraftingStudioTabProps) {
+  const { locale } = useAppLocale();
   // Current active chapter
   const [selectedChapterId, setSelectedChapterId] = useState<number>(
     activeChapterId || chapters[0]?.id || 0
@@ -75,6 +96,10 @@ export function DraftingStudioTab({
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [unblockCards, setUnblockCards] = useState<any[]>([]);
   const [rewriteSuggestion, setRewriteSuggestion] = useState<string | null>(null);
+  const [rewriteTarget, setRewriteTarget] = useState<RewriteTarget | null>(null);
+  const [tightenSuggestions, setTightenSuggestions] = useState<RewriteSuggestion[]>([]);
+  const [writingIntentSuggestion, setWritingIntentSuggestion] = useState<WritingIntentSuggestion | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const [extractionResult, setExtractionResult] = useState<StoryExtractionResult | null>(null);
   const [extractionError, setExtractionError] = useState("");
   const [extractionTypes, setExtractionTypes] = useState<ExtractionType[]>([
@@ -131,7 +156,7 @@ export function DraftingStudioTab({
     const res = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ task, projectId, chapterId: currentChapter?.id, text, extraParams }),
+      body: JSON.stringify({ task, projectId, chapterId: currentChapter?.id, text, extraParams, locale }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `L’action IA a échoué (${res.status}).`);
@@ -264,21 +289,108 @@ export function DraftingStudioTab({
     }
   };
 
-  const handleAiRewrite = async (mode: "show_dont_tell" | "tighten" | "emotional") => {
+  const handleAiRewrite = async (mode: "show_dont_tell" | "tighten" | "paraphrase" | "help_express") => {
     setIsAiLoading(true);
     setAiError("");
     setRewriteSuggestion(null);
+    setTightenSuggestions([]);
+    setWritingIntentSuggestion(null);
     try {
-      // Rewrite the last selected or last paragraph
-      const lastParagraph = content.split("\n\n").filter(Boolean).slice(-1)[0] || content;
-      const result = await requestAi("rewrite", lastParagraph, { mode });
-      setRewriteSuggestion(result);
+      const editor = editorRef.current;
+      const selectionStart = editor?.selectionStart ?? 0;
+      const selectionEnd = editor?.selectionEnd ?? 0;
+      const hasSelection = selectionEnd > selectionStart;
+      if ((mode === "paraphrase" || mode === "help_express") && !hasSelection) {
+        setAiError(locale === "en"
+          ? "Select a phrase or passage in the editor first."
+          : "Sélectionnez d’abord une phrase ou un passage dans le texte.");
+        return;
+      }
+      const target = hasSelection
+        ? { start: selectionStart, end: selectionEnd, original: content.slice(selectionStart, selectionEnd) }
+        : { start: 0, end: content.length, original: content };
+      if (!target.original.trim()) {
+        setAiError(locale === "en" ? "Write some text or select a passage first." : "Écrivez ou sélectionnez d’abord un passage.");
+        return;
+      }
+
+      const result = await requestAi("rewrite", target.original, {
+        mode,
+        contextBefore: content.slice(Math.max(0, target.start - 500), target.start),
+        contextAfter: content.slice(target.end, Math.min(content.length, target.end + 500)),
+      });
+      if (mode === "tighten") {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(result.replace(/^```(?:json)?\s*|\s*```$/gi, "").trim());
+        } catch {
+          throw new Error(locale === "en" ? "The AI response could not be read as a list of suggestions." : "La réponse IA ne contient pas une liste de suggestions lisible.");
+        }
+        if (!Array.isArray(parsed)) throw new Error(locale === "en" ? "The AI did not return a valid suggestions list." : "L’IA n’a pas renvoyé une liste de suggestions valide.");
+        const suggestions: RewriteSuggestion[] = [];
+        for (const item of parsed) {
+          if (!item || typeof item.original !== "string" || typeof item.replacement !== "string") continue;
+          const localStart = target.original.indexOf(item.original);
+          if (!item.original || localStart < 0 || target.original.indexOf(item.original, localStart + 1) >= 0) continue;
+          suggestions.push({
+            start: target.start + localStart,
+            end: target.start + localStart + item.original.length,
+            original: item.original,
+            replacement: item.replacement,
+            explanation: typeof item.explanation === "string" ? item.explanation : "",
+          });
+        }
+        setTightenSuggestions(suggestions);
+        if (suggestions.length === 0) {
+          setAiError(locale === "en" ? "No safe, applicable edits were found in this passage." : "Aucune correction sûre et applicable n’a été trouvée dans ce passage.");
+        }
+      } else if (mode === "help_express") {
+        const parsed = JSON.parse(result) as WritingIntentSuggestion;
+        setRewriteTarget(target);
+        setWritingIntentSuggestion(parsed);
+      } else {
+        setRewriteTarget(target);
+        setRewriteSuggestion(result.trim());
+      }
     } catch (e) {
       console.error(e);
-      setAiError(e instanceof Error ? e.message : "Impossible de proposer une réécriture.");
+      setAiError(e instanceof Error ? e.message : locale === "en" ? "Could not suggest a rewrite." : "Impossible de proposer une réécriture.");
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  const applyRewrite = () => {
+    if (!rewriteTarget || rewriteSuggestion === null) return;
+    if (content.slice(rewriteTarget.start, rewriteTarget.end) !== rewriteTarget.original) {
+      setAiError(locale === "en" ? "The text changed since this suggestion was generated. Generate it again to avoid replacing the wrong passage." : "Le texte a changé depuis cette suggestion. Relancez-la pour éviter de remplacer le mauvais passage.");
+      setRewriteSuggestion(null);
+      return;
+    }
+    setContent((current) =>
+      `${current.slice(0, rewriteTarget.start)}${rewriteSuggestion}${current.slice(rewriteTarget.end)}`
+    );
+    setRewriteSuggestion(null);
+    setRewriteTarget(null);
+  };
+
+  const applyTightenSuggestion = (suggestion: RewriteSuggestion) => {
+    if (content.slice(suggestion.start, suggestion.end) !== suggestion.original) {
+      setAiError(locale === "en" ? "This passage changed. Discard the stale suggestion and run the tool again." : "Ce passage a changé. Ignorez cette suggestion périmée et relancez l’outil.");
+      setTightenSuggestions((current) => current.filter((item) => item !== suggestion));
+      return;
+    }
+    const delta = suggestion.replacement.length - (suggestion.end - suggestion.start);
+    setContent((current) =>
+      `${current.slice(0, suggestion.start)}${suggestion.replacement}${current.slice(suggestion.end)}`
+    );
+    setTightenSuggestions((current) => current
+      .filter((item) =>
+        item !== suggestion && (item.end <= suggestion.start || item.start >= suggestion.end)
+      )
+      .map((item) => item.start >= suggestion.end
+        ? { ...item, start: item.start + delta, end: item.end + delta }
+        : item));
   };
 
   const handleAiExtract = async () => {
@@ -502,6 +614,7 @@ export function DraftingStudioTab({
 
             {/* The Textarea */}
             <textarea
+              ref={editorRef}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onBlur={() => void handleSaveContent()}
@@ -567,27 +680,116 @@ export function DraftingStudioTab({
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sky-300 flex items-center gap-1.5">
                   <Wand2 className="w-4 h-4 text-sky-400" />
-                  Suggestion de réécriture guidée :
+                  {locale === "en" ? "Rewrite proposal — review before applying:" : "Suggestion de réécriture — relisez avant application :"}
                 </span>
-                <button onClick={() => setRewriteSuggestion(null)} className="text-slate-400 hover:text-white">
-                  Fermer
+                <button onClick={() => { setRewriteSuggestion(null); setRewriteTarget(null); }} className="text-slate-400 hover:text-white">
+                  {locale === "en" ? "Dismiss" : "Ignorer"}
                 </button>
               </div>
+              <p className="text-slate-400">
+                {locale === "en" ? "Scope: " : "Portée : "}
+                {rewriteTarget?.start === 0 && rewriteTarget.end === rewriteTarget.original.length
+                  ? (locale === "en" ? "entire chapter" : "chapitre entier")
+                  : (locale === "en" ? "selected passage" : "texte sélectionné")}
+              </p>
               <div className="p-3 bg-slate-900/90 rounded-xl border border-sky-800/40 text-slate-200 font-novel leading-relaxed">
                 {rewriteSuggestion}
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <button
-                  onClick={() => {
-                    setContent((prev) => `${prev}\n\n${rewriteSuggestion}`);
-                    setRewriteSuggestion(null);
-                  }}
+                  onClick={applyRewrite}
                   className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium text-[11px]"
                 >
-                  Insérer à la fin du chapitre
+                  {locale === "en" ? "Replace the original passage" : "Remplacer le texte d’origine"}
                 </button>
               </div>
             </div>
+          )}
+
+          {writingIntentSuggestion && rewriteTarget && (
+            <section aria-live="polite" className="space-y-3 rounded-2xl border border-indigo-500/40 bg-indigo-950/30 p-4 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-bold text-indigo-200">
+                  {locale === "en" ? "Possible meaning and ways to express it" : "Sens possible et pistes de formulation"}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => { setWritingIntentSuggestion(null); setRewriteTarget(null); }}
+                  className="text-slate-400 hover:text-white"
+                >
+                  {locale === "en" ? "Dismiss" : "Ignorer"}
+                </button>
+              </div>
+              <p className="rounded-lg border border-slate-700 bg-slate-900 p-3 text-slate-200">
+                <strong className="text-indigo-300">{locale === "en" ? "You may be trying to say: " : "Vous cherchez peut-être à dire : "}</strong>
+                {writingIntentSuggestion.intention}
+              </p>
+              {writingIntentSuggestion.proposals.map((proposal, index) => (
+                <article key={`${index}-${proposal}`} className="rounded-lg border border-slate-700 bg-slate-900 p-3">
+                  <p className="whitespace-pre-wrap text-slate-100">{proposal}</p>
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (content.slice(rewriteTarget.start, rewriteTarget.end) !== rewriteTarget.original) {
+                          setAiError(locale === "en"
+                            ? "The selected text changed. Select it again and request new suggestions."
+                            : "Le texte sélectionné a changé. Sélectionnez-le à nouveau pour demander de nouvelles propositions.");
+                          setWritingIntentSuggestion(null);
+                          return;
+                        }
+                        setContent((current) =>
+                          `${current.slice(0, rewriteTarget.start)}${proposal}${current.slice(rewriteTarget.end)}`
+                        );
+                        setWritingIntentSuggestion(null);
+                        setRewriteTarget(null);
+                      }}
+                      className="rounded-lg bg-indigo-700 px-2.5 py-1.5 font-medium text-white hover:bg-indigo-600"
+                    >
+                      {locale === "en" ? "Replace selected text" : "Remplacer le texte sélectionné"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {writingIntentSuggestion.proposals.length === 0 && (
+                <p className="text-slate-400">
+                  {locale === "en"
+                    ? "The built-in engine can help identify the limitation, but needs a configured AI model to suggest wording."
+                    : "Le moteur intégré peut signaler sa limite, mais il faut configurer un modèle IA pour obtenir des propositions de formulation."}
+                </p>
+              )}
+            </section>
+          )}
+
+          {tightenSuggestions.length > 0 && (
+            <section aria-live="polite" className="space-y-2 rounded-2xl border border-amber-500/40 bg-amber-950/30 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-amber-200">
+                  <Wand2 className="h-4 w-4 text-amber-400" />
+                  {locale === "en" ? "Editing suggestions — your text is unchanged" : "Propositions d’élagage — votre texte reste inchangé"}
+                </h3>
+                <button type="button" onClick={() => setTightenSuggestions([])} className="text-xs text-slate-400 hover:text-white">
+                  {locale === "en" ? "Dismiss all" : "Tout ignorer"}
+                </button>
+              </div>
+              {tightenSuggestions.map((suggestion, index) => (
+                <article key={`${suggestion.start}-${suggestion.original}-${index}`} className="rounded-xl border border-slate-700 bg-slate-900/90 p-3 text-xs">
+                  <p className="text-slate-400">{locale === "en" ? "Original passage" : "Passage repéré"}</p>
+                  <p className="mt-1 text-slate-200"><mark className="rounded bg-amber-400/25 px-0.5 text-amber-100">{suggestion.original}</mark></p>
+                  <p className="mt-2 text-slate-400">{locale === "en" ? "Suggested change" : "Proposition"}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-emerald-200">{suggestion.replacement || (locale === "en" ? "(remove)" : "(supprimer)")}</p>
+                  {suggestion.explanation && <p className="mt-2 text-slate-400">{suggestion.explanation}</p>}
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button type="button" onClick={() => setTightenSuggestions((current) => current.filter((item) => item !== suggestion))} className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 hover:bg-slate-800">
+                      {locale === "en" ? "Ignore" : "Ignorer"}
+                    </button>
+                    <button type="button" onClick={() => applyTightenSuggestion(suggestion)} className="rounded-lg bg-emerald-700 px-2.5 py-1.5 font-medium text-white hover:bg-emerald-600">
+                      {locale === "en" ? "Apply replacement" : "Valider le remplacement"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </section>
           )}
 
           {extractionError && <p role="alert" className="rounded-xl border border-rose-700/50 bg-rose-950/40 p-3 text-xs text-rose-200">{extractionError}</p>}
@@ -661,7 +863,7 @@ export function DraftingStudioTab({
                 </span>
                 <span className="text-[10px] text-slate-400">Sensations</span>
               </button>
-              <p className="px-1 text-[11px] leading-relaxed text-slate-600">Propose une version plus sensorielle du dernier paragraphe. La suggestion est affichée séparément.</p>
+              <p className="px-1 text-[11px] leading-relaxed text-slate-600">{locale === "en" ? "Rewrites the selected passage, or the whole chapter if nothing is selected. Review and explicitly replace the original." : "Réécrit le passage sélectionné, ou tout le chapitre si rien n’est sélectionné. Relisez puis validez le remplacement."}</p>
 
               {/* Tighten prose */}
               <button
@@ -676,7 +878,37 @@ export function DraftingStudioTab({
                 </span>
                 <span className="text-[10px] text-slate-400">Élaguer</span>
               </button>
-              <p className="px-1 text-[11px] leading-relaxed text-slate-600">Repère les mots de remplissage et longueurs dans le dernier paragraphe, sans remplacer votre texte.</p>
+              <p className="px-1 text-[11px] leading-relaxed text-slate-600">{locale === "en" ? "Finds passages to tighten in your selection or chapter and presents each change for approval." : "Repère les passages à alléger dans la sélection ou le chapitre et soumet chaque changement à validation."}</p>
+
+              <button
+                onClick={() => handleAiRewrite("paraphrase")}
+                disabled={isAiLoading}
+                className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-200 text-xs font-medium transition flex items-center justify-between"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Wand2 className="w-3.5 h-3.5 text-indigo-400" />
+                  {locale === "en" ? "Paraphrase selection" : "Reformuler la sélection"}
+                </span>
+                <span className="text-[10px] text-slate-400">{locale === "en" ? "Rephrase" : "Paraphraser"}</span>
+              </button>
+              <p className="px-1 text-[11px] leading-relaxed text-slate-600">
+                {locale === "en" ? "Select text first; preserves meaning and offers a replacement for approval." : "Sélectionnez du texte; le sens est préservé et le remplacement reste soumis à validation."}
+              </p>
+
+              <button
+                onClick={() => handleAiRewrite("help_express")}
+                disabled={isAiLoading}
+                className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-200 text-xs font-medium transition flex items-center justify-between"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Lightbulb className="w-3.5 h-3.5 text-emerald-400" />
+                  {locale === "en" ? "Help me express this idea" : "M’aider à exprimer cette idée"}
+                </span>
+                <span className="text-[10px] text-slate-400">{locale === "en" ? "Interpret" : "Interpréter"}</span>
+              </button>
+              <p className="px-1 text-[11px] leading-relaxed text-slate-600">
+                {locale === "en" ? "Select a passage to get a tentative interpretation and wording options." : "Sélectionnez un passage pour obtenir une interprétation prudente et des formulations possibles."}
+              </p>
 
               {/* Select extraction categories */}
               <fieldset className="space-y-2 rounded-xl border border-slate-700 bg-slate-950/50 p-3">

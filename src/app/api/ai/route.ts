@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server";
-import { generateNovelContent, type AiTask } from "@/features/ai/generate-novel-content";
+import { generateNovelContent } from "@/features/ai/generate-novel-content";
 import type { AiRequestOptions } from "@/lib/ai-service";
+import { AI_TASKS, CHARACTER_SUGGESTION_FIELDS, type AiTask } from "@/features/ai/types";
 
 export const maxDuration = 300;
 
-const aiTasks = new Set([
-  "continue",
-  "unblock",
-  "rewrite",
-  "extract",
-  "coherence",
-  "character_help",
-  "structure_help",
-]);
+const aiTasks = new Set<string>(AI_TASKS);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -56,12 +49,30 @@ export async function POST(req: Request) {
   }
 
   try {
+    const requestedLocale = body.locale === "en" ? "en" : body.locale === "fr" ? "fr" : undefined;
+    const extraParams = isRecord(body.extraParams) ? body.extraParams : {};
+    if (body.task === "rewrite" && extraParams.mode !== undefined &&
+      !["show_dont_tell", "tighten", "paraphrase", "help_express"].includes(String(extraParams.mode))) {
+      return NextResponse.json({ error: "Sous-action de réécriture non prise en charge." }, { status: 400 });
+    }
+    if (body.task === "extract" && extraParams.types !== undefined &&
+      (!Array.isArray(extraParams.types) || extraParams.types.length === 0 ||
+        extraParams.types.some((type) => typeof type !== "string" ||
+          !["characters", "places", "events", "generalInfo"].includes(type)))) {
+      return NextResponse.json({ error: "Les catégories d’extraction sont invalides." }, { status: 400 });
+    }
+    if (body.task === "character_help" && extraParams.missingFields !== undefined &&
+      (!Array.isArray(extraParams.missingFields) ||
+        extraParams.missingFields.some((field) => typeof field !== "string" ||
+          !(CHARACTER_SUGGESTION_FIELDS as readonly string[]).includes(field)))) {
+      return NextResponse.json({ error: "Les champs demandés pour la fiche personnage sont invalides." }, { status: 400 });
+    }
     const result = await generateNovelContent({
       task: body.task,
       text: typeof body.text === "string" ? body.text : undefined,
       projectId,
       chapterId,
-      extraParams: isRecord(body.extraParams) ? body.extraParams : undefined,
+      extraParams: { ...extraParams, ...(requestedLocale ? { locale: requestedLocale } : {}) },
       userConfig: parseUserConfig(body.userConfig),
     });
     return NextResponse.json({ result });
