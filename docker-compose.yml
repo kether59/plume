@@ -16,5 +16,58 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: postgresql://novel_writer:${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans .env}@database:5432/novel_writer
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://novel_writer:${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans .env}@database:5432/novel_writer
+      APP_EMAIL: ${APP_EMAIL:?Définissez APP_EMAIL dans .env}
+      APP_PASSWORD: ${APP_PASSWORD:?Définissez APP_PASSWORD dans .env}
+      AUTH_SECRET: ${AUTH_SECRET:?Définissez AUTH_SECRET dans .env}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  test-database:
+    image: postgres:18-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: novel_writer_test
+      POSTGRES_USER: novel_writer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novel_writer -d novel_writer_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  integration-tests:
+    profiles: ["test"]
+    build:
+      context: .
+      target: integration-tests
+    environment:
+      DATABASE_URL: postgresql://novel_writer:${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans .env}@test-database:5432/novel_writer_test
+    depends_on:
+      test-database:
+        condition: service_healthy
+    command: sh -c "npm run db:push && npm run test:integration"
+    restart: "no"
+
 volumes:
   postgres-data:

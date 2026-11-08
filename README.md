@@ -95,6 +95,34 @@ npm start
 Le script `start` écoute sur toutes les interfaces réseau afin de permettre l’accès depuis d’autres appareils du réseau
 local. Le serveur utilise le port 3000 par défaut. En développement, `npm run dev` reste destiné à la machine locale.
 
+### Démarrage complet avec Docker
+
+Après avoir copié `.env.example` vers `.env` et renseigné les mots de passe/secrets comme décrit plus haut, une seule
+commande démarre PostgreSQL, attend sa disponibilité, applique le schéma Drizzle puis lance l’application :
+
+```powershell
+docker compose up --build -d
+```
+
+Ouvrez <http://localhost:3000>. L’application n’est publiée que sur l’interface locale, et les services se connectent
+à PostgreSQL via le réseau Docker. Utilisez des caractères alphanumériques pour `POSTGRES_PASSWORD` afin d’éviter les
+caractères à encoder dans l’URL interne. `docker compose down` arrête les conteneurs en conservant les données du
+volume `postgres-data`.
+
+Pour exécuter les tests d’intégration sur une base séparée et jetable :
+
+```powershell
+docker compose --profile test run --build --rm integration-tests
+```
+
+Cette commande applique le schéma à `novel_writer_test` et ne touche pas à la base de l’application.
+
+### Tests
+
+`npm run test:unit` exécute les tests unitaires sans base de données. Pour lancer les tests d’intégration depuis Node,
+démarrez une base dédiée, définissez `DATABASE_URL` vers cette base, exécutez `npm run db:push`, puis lancez
+`npm run test:integration`. Ne pointez pas ces tests vers une base contenant des données à conserver.
+
 ### Installation sur Raspberry Pi
 
 Le projet peut être installé sur un Raspberry Pi 64 bits récent avec une version de Node compatible et Docker/Compose.
@@ -207,5 +235,5 @@ indique que les tables manquent, exécutez `npm run db:push`.
   ni les sauvegardes.
 - Les paramètres IA peuvent contenir une clé API en base. Gardez l’installation privée et protégez également les
   sauvegardes.
-- Le projet ne fournit pas encore de conteneur applicatif, de reverse proxy/TLS intégré ni de pipeline de déploiement
-  automatique. Ces éléments sont à ajouter avant une exposition publique.
+- Le projet ne fournit pas de reverse proxy/TLS intégré ni de pipeline de déploiement automatique. Ces éléments sont
+  à ajouter avant une exposition publique.

@@ -348,8 +348,8 @@ export async function callAiService(params: {
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,
-      ...(config?.provider === "lmstudio" && expectsObjectJson(task, extraParams)
-        ? { response_format: { type: "json_object" } }
+      ...(config?.provider === "lmstudio" && expectsStructuredJson(task, extraParams)
+        ? { response_format: getLmStudioResponseFormat(task, extraParams) }
         : {}),
     }),
     ...(config?.provider === "lmstudio"
@@ -373,10 +373,142 @@ function expectsStructuredJson(task: AiTask, extraParams?: Record<string, any>) 
     (task === "rewrite" && ["tighten", "help_express", "paraphrase"].includes(extraParams?.mode));
 }
 
-function expectsObjectJson(task: AiTask, extraParams?: Record<string, any>) {
-  return task === "extract" || task === "coherence" || task === "character_help" ||
-    task === "structure_help" ||
-    (task === "rewrite" && ["help_express", "paraphrase"].includes(extraParams?.mode));
+function stringSchema() {
+  return { type: "string" };
+}
+
+function objectSchema(properties: Record<string, unknown>, required = Object.keys(properties)) {
+  return {
+    type: "object",
+    properties,
+    required,
+    additionalProperties: false,
+  };
+}
+
+function arraySchema(items: unknown, minItems?: number, maxItems?: number) {
+  return {
+    type: "array",
+    items,
+    ...(minItems === undefined ? {} : { minItems }),
+    ...(maxItems === undefined ? {} : { maxItems }),
+  };
+}
+
+function getLmStudioResponseFormat(task: AiTask, extraParams?: Record<string, any>) {
+  const mode = extraParams?.mode;
+  const stringList = arraySchema(stringSchema());
+  const schemas: Partial<Record<AiTask, { name: string; schema: Record<string, unknown> }>> = {
+    unblock: {
+      name: "unblock_suggestions",
+      schema: objectSchema({
+        suggestions: arraySchema(objectSchema({
+          type: stringSchema(),
+          title: stringSchema(),
+          description: stringSchema(),
+          starter: stringSchema(),
+        }), 3, 3),
+      }),
+    },
+    world_brainstorm: {
+      name: "worldbuilding_suggestions",
+      schema: objectSchema({
+        suggestions: arraySchema(objectSchema({
+          title: stringSchema(),
+          description: stringSchema(),
+        }), 3, 3),
+      }),
+    },
+    extract: {
+      name: "story_extraction",
+      schema: objectSchema({
+        characters: arraySchema(objectSchema({
+          name: stringSchema(),
+          role: stringSchema(),
+          consciousDesire: stringSchema(),
+          unconsciousNeed: stringSchema(),
+          lieOrFlaw: stringSchema(),
+          distinguishingFeatures: stringSchema(),
+          notes: stringSchema(),
+        })),
+        places: arraySchema(objectSchema({ title: stringSchema(), category: stringSchema(), content: stringSchema() })),
+        timelineEvents: arraySchema(objectSchema({
+          title: stringSchema(),
+          description: stringSchema(),
+          timeLabel: stringSchema(),
+          characterNames: stringList,
+          worldNoteTitles: stringList,
+        })),
+        generalInfo: arraySchema(objectSchema({ title: stringSchema(), category: stringSchema(), content: stringSchema() })),
+        note: stringSchema(),
+      }),
+    },
+    coherence: {
+      name: "coherence_report",
+      schema: objectSchema({
+        score: { type: "number", minimum: 0, maximum: 100 },
+        strengths: stringList,
+        warnings: arraySchema(objectSchema({ type: stringSchema(), message: stringSchema() })),
+        beginnerTip: stringSchema(),
+      }),
+    },
+    character_help: {
+      name: "character_suggestions",
+      schema: objectSchema(Object.fromEntries(
+        (Array.isArray(extraParams?.missingFields)
+          ? extraParams.missingFields
+          : CHARACTER_SUGGESTION_FIELDS).map((field: string) => [field, stringSchema()])
+      )),
+    },
+    structure_help: {
+      name: "story_structure",
+      schema: objectSchema({
+        incitingIncident: stringSchema(),
+        firstPlotPoint: stringSchema(),
+        midpoint: stringSchema(),
+        allHopeLost: stringSchema(),
+        climax: stringSchema(),
+        resolution: stringSchema(),
+      }),
+    },
+  };
+  if (task === "rewrite" && mode === "tighten") {
+    schemas.rewrite = {
+      name: "editing_suggestions",
+      schema: objectSchema({
+        suggestions: arraySchema(objectSchema({
+          original: stringSchema(),
+          replacement: stringSchema(),
+          explanation: stringSchema(),
+        }), 0, 12),
+      }),
+    };
+  } else if (task === "rewrite" && mode === "help_express") {
+    schemas.rewrite = {
+      name: "writing_intent",
+      schema: objectSchema({
+        intention: stringSchema(),
+        proposals: arraySchema(stringSchema(), 0, 3),
+      }),
+    };
+  } else if (task === "rewrite" && mode === "paraphrase") {
+    schemas.rewrite = {
+      name: "paraphrase",
+      schema: objectSchema({ rewrittenText: stringSchema() }),
+    };
+  }
+  const definition = schemas[task];
+  if (!definition) {
+    throw new Error(`Aucun schéma LM Studio n’est défini pour l’action « ${task} ».`);
+  }
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: definition.name,
+      strict: true,
+      schema: definition.schema,
+    },
+  };
 }
 
 function buildSystemPrompt(context: NovelContext, locale: "fr" | "en", toneDirective?: string) {
@@ -451,7 +583,13 @@ function validateTaskResponse(
     (task === "rewrite" && (mode === "tighten" || mode === "help_express" || mode === "paraphrase"));
   if (!expectsJson) return response;
 
-  const parsed = parseJsonResponse(task, response);
+  const rawParsed = parseJsonResponse(task, response);
+  let parsed = rawParsed;
+  if ((task === "unblock" || task === "world_brainstorm" || (task === "rewrite" && mode === "tighten")) &&
+    isObject(rawParsed) && Array.isArray(rawParsed.suggestions) &&
+    Object.keys(rawParsed).length === 1) {
+    parsed = rawParsed.suggestions;
+  }
   if (task === "unblock" || task === "world_brainstorm") {
     const expectedCount = 3;
     if (!Array.isArray(parsed) || parsed.length !== expectedCount) {
@@ -632,7 +770,7 @@ function buildPromptForTask(
           ? "Offer three distinct, optional ways to unblock the scene: an external disruption, an internal conflict tied to a known character flaw, and a time-sensitive threat. Do not decide for the author or present suggestions as canon."
           : "Propose trois pistes facultatives et distinctes pour débloquer la scène : une perturbation extérieure, un conflit intérieur lié à une faille connue et une menace urgente. Ne décide pas à la place de l’auteur et ne présente pas les propositions comme des faits établis.",
         text.slice(-4000),
-        `JSON array of exactly 3 objects, each with string properties: ${locale === "en" ? "type, title, description, starter" : "type, title, description, starter"}. No Markdown.`,
+        `JSON object with exactly one property "suggestions": an array of exactly 3 objects, each with string properties type, title, description, starter. No Markdown.`,
       );
 
     case "rewrite":
@@ -642,7 +780,7 @@ function buildPromptForTask(
             ? "Suggest up to 12 precise edits that improve clarity, rhythm, or concision without flattening the author's voice. Each original must be an exact, unique substring of target_text. Keep proposals independent and do not rewrite the whole passage."
             : "Propose jusqu’à 12 corrections précises améliorant la clarté, le rythme ou la concision sans effacer la voix de l’auteur. Chaque texte original doit être un extrait exact et unique du texte cible. Les propositions doivent être indépendantes; ne réécris pas tout le passage.",
           text,
-          `JSON array of objects with string properties original, replacement, explanation. Use an empty array when no useful change exists. No Markdown.`,
+          `JSON object with exactly one property "suggestions": an array of up to 12 objects with string properties original, replacement, explanation. Use an empty suggestions array when no useful change exists. No Markdown.`,
         );
       }
       if (extraParams?.mode === "help_express") {
@@ -680,7 +818,7 @@ function buildPromptForTask(
           ? "Extract only facts explicitly established in the chapter for the requested categories. Do not infer or invent. Avoid duplicates with known characters and lore. Include concise textual evidence in notes/description/content. Return empty arrays for unrequested or unsupported categories."
           : "Extrais uniquement les faits explicitement établis dans le chapitre pour les catégories demandées. N’infère et n’invente rien. Évite les doublons avec les personnages et notes d’univers connus. Ajoute une preuve textuelle concise dans notes/description/content. Renvoie des listes vides pour les catégories non demandées ou sans élément étayé.",
         text.slice(0, 18000),
-        `JSON object with arrays characters, places, timelineEvents, generalInfo and optional string note. Character items: {name, role, consciousDesire, unconsciousNeed, lieOrFlaw, distinguishingFeatures, notes}; place/general items: {title, category, content}; event items: {title, description, timeLabel, characterNames: string[], worldNoteTitles: string[]}. Empty arrays are required where there are no results. No Markdown.`,
+        `JSON object with arrays characters, places, timelineEvents, generalInfo and string note (use an empty string when there is no note). Character items: {name, role, consciousDesire, unconsciousNeed, lieOrFlaw, distinguishingFeatures, notes}; place/general items: {title, category, content}; event items: {title, description, timeLabel, characterNames: string[], worldNoteTitles: string[]}. Empty arrays are required where there are no results. No Markdown.`,
         { requestedCategories: extraParams?.types || ["characters", "places", "events", "generalInfo"] },
       );
 
@@ -699,7 +837,7 @@ function buildPromptForTask(
           ? "Suggest creative, optional character details only for the requested empty fields. Use the existing character data and novel context for consistency. Keep suggestions mutually compatible; never overwrite or contradict a supplied value. Physical traits should be concrete but not stereotyped."
           : "Propose des détails créatifs et facultatifs uniquement pour les champs vides demandés. Appuie-toi sur les données du personnage et le contexte du roman. Garde les propositions compatibles entre elles; ne remplace ni ne contredis une valeur fournie. Les traits physiques doivent être concrets et éviter les stéréotypes.",
         text || extraParams?.name || "",
-        `JSON object whose only allowed string properties are the requested field names: ${JSON.stringify(extraParams?.missingFields || CHARACTER_SUGGESTION_FIELDS)}. Omit a field if no suitable suggestion is possible. No Markdown.`,
+        `JSON object whose only allowed string properties are the requested field names: ${JSON.stringify(extraParams?.missingFields || CHARACTER_SUGGESTION_FIELDS)}. Include every requested property; use an empty string if no suitable suggestion is possible. No Markdown.`,
         { existing: extraParams?.existing || {}, requestedFields: extraParams?.missingFields || CHARACTER_SUGGESTION_FIELDS },
       );
 
@@ -718,7 +856,7 @@ function buildPromptForTask(
           ? "Brainstorm optional worldbuilding ideas that fit the novel's genre, tone, synopsis, and existing lore. Avoid repeating supplied lore. Do not claim suggestions are established facts."
           : "Imagine des pistes facultatives de construction d’univers adaptées au genre, au ton, au synopsis et aux notes existantes. Évite de répéter les éléments fournis. Ne présente pas les propositions comme des faits établis.",
         text,
-        "JSON array of 3 objects with string properties title and description. No Markdown.",
+        `JSON object with exactly one property "suggestions": an array of exactly 3 objects with string properties title and description. No Markdown.`,
         { existingLoreTitles: (ctx.worldNotes || []).map((note) => note.title) },
       );
 
